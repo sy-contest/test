@@ -1,0 +1,18 @@
+{
+  "users": [
+    {
+      "username": "player1",
+      "password": "password1",
+      "opponent": "player2",
+      "gameTime": "2023-06-01T15:00:00Z",
+      "eliminated": false
+    },
+    {
+      "username": "player2",
+      "password": "password2",
+      "opponent": "player1",
+      "gameTime": "2023-06-01T15:00:00Z",
+      "eliminated": false
+    }
+  ]
+}
