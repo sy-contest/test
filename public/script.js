@@ -30,7 +30,7 @@ async function login() {
     }
   } catch (error) {
     console.error('Login error:', error);
-    alert('An error occurred during login');
+    alert('An error occurred during login. Please try again.');
   }
 }
 
@@ -44,15 +44,15 @@ async function makeChoice(choice) {
       body: JSON.stringify({ action: 'makeChoice', username: currentUser, choice })
     });
 
-    const data = await response.json();
-    if (data.status === 'complete') {
-      handleGameResult(data);
-    } else {
-      document.getElementById('game-status').textContent = data.message;
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
+
+    const data = await response.json();
+    handleGameStatus(data);
   } catch (error) {
     console.error('Choice error:', error);
-    alert('An error occurred while making a choice');
+    alert('An error occurred while making a choice. Please try again.');
   }
 }
 
@@ -65,24 +65,45 @@ async function pollGameStatus() {
 
   try {
     const response = await fetch(`/api/game?username=${currentUser}`);
-    const data = await response.json();
-
-    if (data.status === 'complete') {
-      handleGameResult(data);
-    } else {
-      document.getElementById('game-status').textContent = data.message;
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
+
+    const data = await response.json();
+    handleGameStatus(data);
   } catch (error) {
     console.error('Polling error:', error);
   }
 }
 
-function handleGameResult(data) {
-  document.getElementById('result').textContent = data.result;
-  document.getElementById('game-status').textContent = 'Game Over';
-  document.querySelectorAll('.choice').forEach(button => button.disabled = true);
+function handleGameStatus(data) {
+  const gameStatus = document.getElementById('game-status');
+  const result = document.getElementById('result');
 
-  if (data.loser === currentUser) {
-    document.getElementById('game-status').textContent = 'You have been eliminated from the tournament.';
+  switch (data.status) {
+    case 'waiting':
+      gameStatus.textContent = data.message;
+      break;
+    case 'choose':
+      gameStatus.textContent = data.message;
+      enableChoices();
+      break;
+    case 'complete':
+      gameStatus.textContent = 'Game Over';
+      result.textContent = data.result;
+      disableChoices();
+      if (data.loser === currentUser) {
+        gameStatus.textContent = 'You have been eliminated from the tournament.';
+      }
+      break;
   }
+}
+
+function enableChoices() {
+  document.querySelectorAll('.choice').forEach(button => button.disabled = false);
+}
+
+function disableChoices() {
+  document.querySelectorAll('.choice').forEach(button => button.disabled = true);
 }
