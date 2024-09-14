@@ -4,6 +4,7 @@ import { getUser, updateUser } from '../../server/database';
 let activeGames = new Map();
 
 export default async function handler(req, res) {
+  console.log('Received request:', req.method, req.url, req.body);
   try {
     const { method } = req;
 
@@ -18,11 +19,12 @@ export default async function handler(req, res) {
     }
   } catch (error) {
     console.error('Server error:', error);
-    res.status(500).json({ error: 'Internal server error', message: error.message });
+    res.status(500).json({ error: 'Internal server error', message: error.message, stack: error.stack });
   }
 }
 
 async function handlePost(req, res) {
+  console.log('Handling POST request:', req.body);
   const { action, username, password, choice } = req.body;
 
   if (action === 'login') {
@@ -35,32 +37,39 @@ async function handlePost(req, res) {
 }
 
 async function handleGet(req, res) {
+  console.log('Handling GET request:', req.query);
   const { username } = req.query;
   return await handleGetGameStatus(username, res);
 }
 
 async function handleLogin(username, password, res) {
-  const user = await getUser(username);
-  if (user && user.password === password && !user.eliminated) {
-    res.status(200).json({
-      success: true,
-      opponentName: user.opponent,
-      gameTime: user.gameTime
-    });
-  } else {
-    res.status(401).json({
-      success: false,
-      message: 'Invalid credentials or user eliminated'
-    });
+  console.log('Handling login for:', username);
+  try {
+    const user = await getUser(username);
+    console.log('User data:', user);
+    if (user && user.password === password && !user.eliminated) {
+      res.status(200).json({
+        success: true,
+        opponentName: user.opponent,
+        gameTime: user.gameTime
+      });
+    } else {
+      res.status(401).json({
+        success: false,
+        message: 'Invalid credentials or user eliminated'
+      });
+    }
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Login failed', message: error.message, stack: error.stack });
   }
 }
 
-async function handleMakeChoice(username, choice, res) {
-  let game = activeGames.get(username);
-  if (!game) {
-    const user = await getUser(username);
+function handleMakeChoice({ username, choice }, res) {
+  if (!activeGames.has(username)) {
+    const user = getUser(username);
     if (user && !user.eliminated) {
-      game = new Game(username, user.opponent);
+      const game = new Game(username, user.opponent);
       activeGames.set(username, game);
       activeGames.set(user.opponent, game);
     } else {
@@ -68,6 +77,7 @@ async function handleMakeChoice(username, choice, res) {
     }
   }
 
+  const game = activeGames.get(username);
   game.makeChoice(username, choice);
 
   if (game.isComplete()) {
@@ -76,21 +86,21 @@ async function handleMakeChoice(username, choice, res) {
     activeGames.delete(game.getOpponent(username));
 
     if (result.loser) {
-      await updateUser(result.loser, { eliminated: true });
+      updateUser(result.loser, { eliminated: true });
     }
 
     res.status(200).json(result);
   } else {
-    res.status(200).json({ status: 'waiting', message: 'Choice recorded' });
+    res.status(200).json({ message: 'Choice recorded' });
   }
 }
 
-async function handleGetGameStatus(username, res) {
+function handleGetGameStatus({ username }, res) {
   const game = activeGames.get(username);
   if (game) {
     res.status(200).json(game.getStatus(username));
   } else {
-    res.status(200).json({ status: 'waiting', message: 'Waiting for game to start' });
+    res.status(200).json({ status: 'waiting' });
   }
 }
 
