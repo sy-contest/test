@@ -1,0 +1,4 @@
+[
+    {"username": "player1", "password": "password1", "eliminated": false},
+    {"username": "player2", "password": "password2", "eliminated": false}
+]
