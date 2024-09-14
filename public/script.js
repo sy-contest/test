@@ -1,52 +1,88 @@
-const socket = io();
+let currentUser = null;
 
-const loginForm = document.getElementById('login-form');
-const gameContainer = document.getElementById('game-container');
-const loginBtn = document.getElementById('login-btn');
-const opponentName = document.getElementById('opponent-name');
-const gameStatus = document.getElementById('game-status');
-const choices = document.querySelectorAll('.choice');
-const result = document.getElementById('result');
-
-loginBtn.addEventListener('click', () => {
-    const username = document.getElementById('username').value;
-    const password = document.getElementById('password').value;
-    socket.emit('login', { username, password });
+document.getElementById('login-btn').addEventListener('click', login);
+document.querySelectorAll('.choice').forEach(button => {
+  button.addEventListener('click', () => makeChoice(button.dataset.choice));
 });
 
-socket.on('loginResult', (data) => {
-    if (data.success) {
-        loginForm.style.display = 'none';
-        gameContainer.style.display = 'block';
-        opponentName.textContent = `Opponent: ${data.opponentName}`;
-        gameStatus.textContent = `Game starts at: ${data.gameTime}`;
-    } else {
-        alert('Login failed: ' + data.message);
-    }
-});
+async function login() {
+  const username = document.getElementById('username').value;
+  const password = document.getElementById('password').value;
 
-choices.forEach(choice => {
-    choice.addEventListener('click', () => {
-        socket.emit('makeChoice', choice.dataset.choice);
+  try {
+    const response = await fetch('/api/game', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'login', username, password })
     });
-});
 
-socket.on('gameResult', (data) => {
-    result.textContent = data.result;
-    if (data.eliminated) {
-        choices.forEach(choice => choice.disabled = true);
-        gameStatus.textContent = 'You have been eliminated from the tournament.';
+    const data = await response.json();
+
+    if (data.success) {
+      currentUser = username;
+      document.getElementById('login-form').style.display = 'none';
+      document.getElementById('game-container').style.display = 'block';
+      document.getElementById('opponent-name').textContent = `Opponent: ${data.opponentName}`;
+      document.getElementById('game-status').textContent = `Game starts at: ${data.gameTime}`;
+      startPolling();
+    } else {
+      alert('Login failed: ' + data.message);
     }
-});
+  } catch (error) {
+    console.error('Login error:', error);
+    alert('An error occurred during login');
+  }
+}
 
-socket.on('opponentChoice', (choice) => {
-    // Update UI to show opponent's choice
-});
+async function makeChoice(choice) {
+  if (!currentUser) return;
 
-socket.on('gameStart', () => {
-    gameStatus.textContent = 'Game has started. Make your choice!';
-});
+  try {
+    const response = await fetch('/api/game', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'makeChoice', username: currentUser, choice })
+    });
 
-socket.on('gameEnd', (data) => {
-    // Handle game end, show final result
-});
+    const data = await response.json();
+    if (data.status === 'complete') {
+      handleGameResult(data);
+    } else {
+      document.getElementById('game-status').textContent = data.message;
+    }
+  } catch (error) {
+    console.error('Choice error:', error);
+    alert('An error occurred while making a choice');
+  }
+}
+
+function startPolling() {
+  setInterval(pollGameStatus, 2000); // Poll every 2 seconds
+}
+
+async function pollGameStatus() {
+  if (!currentUser) return;
+
+  try {
+    const response = await fetch(`/api/game?username=${currentUser}`);
+    const data = await response.json();
+
+    if (data.status === 'complete') {
+      handleGameResult(data);
+    } else {
+      document.getElementById('game-status').textContent = data.message;
+    }
+  } catch (error) {
+    console.error('Polling error:', error);
+  }
+}
+
+function handleGameResult(data) {
+  document.getElementById('result').textContent = data.result;
+  document.getElementById('game-status').textContent = 'Game Over';
+  document.querySelectorAll('.choice').forEach(button => button.disabled = true);
+
+  if (data.loser === currentUser) {
+    document.getElementById('game-status').textContent = 'You have been eliminated from the tournament.';
+  }
+}
